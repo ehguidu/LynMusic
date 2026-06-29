@@ -204,7 +204,7 @@ private val incompleteStatuses = setOf(
 private fun ImportSourceType.effectiveOfflineDownloadQuality(
     requested: NavidromeAudioQuality,
 ): NavidromeAudioQuality {
-    return if (this == ImportSourceType.NAVIDROME || this == ImportSourceType.SUBSONIC) {
+    return if (this == ImportSourceType.NAVIDROME || this == ImportSourceType.SUBSONIC || this == ImportSourceType.LX_MUSIC) {
         requested
     } else {
         NavidromeAudioQuality.Original

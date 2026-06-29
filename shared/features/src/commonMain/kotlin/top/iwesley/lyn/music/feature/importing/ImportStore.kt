@@ -11,6 +11,7 @@ import top.iwesley.lyn.music.core.model.ImportSourceIndexMode
 import top.iwesley.lyn.music.core.model.ImportSourceType
 import top.iwesley.lyn.music.core.model.LocalFolderPickerMode
 import top.iwesley.lyn.music.core.model.LocalFolderSelection
+import top.iwesley.lyn.music.core.model.LxMusicSourceDraft
 import top.iwesley.lyn.music.core.model.NavidromeSourceDraft
 import top.iwesley.lyn.music.core.model.PlatformCapabilities
 import top.iwesley.lyn.music.core.model.SambaSourceDraft
@@ -87,6 +88,9 @@ data class ImportState(
     val embyWanBaseUrl: String = "",
     val embyUsername: String = "",
     val embyPassword: String = "",
+    val lxMusicLabel: String = "",
+    val lxMusicBridgeUrl: String = "",
+    val lxMusicToken: String = "",
     val creatingSourceType: ImportSourceType? = null,
     val editingSource: RemoteSourceEditorState? = null,
     val isWorking: Boolean = false,
@@ -115,6 +119,8 @@ sealed interface ImportIntent {
     data object AddSubsonicSource : ImportIntent
     data object TestEmbySource : ImportIntent
     data object AddEmbySource : ImportIntent
+    data object TestLxMusicSource : ImportIntent
+    data object AddLxMusicSource : ImportIntent
     data class OpenRemoteSourceCreator(val type: ImportSourceType) : ImportIntent
     data object DismissRemoteSourceCreator : ImportIntent
     data class OpenRemoteSourceEditor(val sourceId: String) : ImportIntent
@@ -151,6 +157,9 @@ sealed interface ImportIntent {
     data class EmbyWanBaseUrlChanged(val value: String) : ImportIntent
     data class EmbyUsernameChanged(val value: String) : ImportIntent
     data class EmbyPasswordChanged(val value: String) : ImportIntent
+    data class LxMusicLabelChanged(val value: String) : ImportIntent
+    data class LxMusicBridgeUrlChanged(val value: String) : ImportIntent
+    data class LxMusicTokenChanged(val value: String) : ImportIntent
     data class RemoteSourceLabelChanged(val value: String) : ImportIntent
     data class RemoteSourceServerChanged(val value: String) : ImportIntent
     data class RemoteSourcePortChanged(val value: String) : ImportIntent
@@ -446,6 +455,46 @@ class ImportStore(
                 }
             }
 
+            ImportIntent.TestLxMusicSource -> {
+                val draft = lxMusicDraftOrNull(
+                    label = state.value.lxMusicLabel,
+                    bridgeUrl = state.value.lxMusicBridgeUrl,
+                    token = state.value.lxMusicToken,
+                    allowBlankToken = true,
+                ) ?: return
+                runImport {
+                    repository.testLxMusicSource(draft)
+                        .onSuccess { setTestMessage("LX 音源脚本桥接测试成功。") }
+                        .onFailure { setTestMessage("LX 音源脚本桥接测试失败: ${it.message}") }
+                }
+            }
+
+            ImportIntent.AddLxMusicSource -> {
+                val draft = lxMusicDraftOrNull(
+                    label = state.value.lxMusicLabel,
+                    bridgeUrl = state.value.lxMusicBridgeUrl,
+                    token = state.value.lxMusicToken,
+                    allowBlankToken = true,
+                ) ?: return
+                runImport(ImportScanOperation.CreateRemote(ImportSourceType.LX_MUSIC)) {
+                    repository.addLxMusicSource(draft)
+                        .onSuccess { summary ->
+                            updateState {
+                                it.copy(
+                                    creatingSourceType = null,
+                                    lxMusicLabel = "",
+                                    lxMusicBridgeUrl = "",
+                                    lxMusicToken = "",
+                                    testMessage = null,
+                                )
+                            }
+                            recordScanSummary(summary)
+                            setMessage("LX 音源已启用，需在曲库来源选择在线来源后搜索歌曲。")
+                        }
+                        .onFailure { setCreateOrPageMessage(ImportSourceType.LX_MUSIC, "LX 音源保存失败: ${it.message}") }
+                }
+            }
+
             is ImportIntent.OpenRemoteSourceCreator -> {
                 if (intent.type == ImportSourceType.LOCAL_FOLDER) return
                 updateState { state ->
@@ -580,6 +629,21 @@ class ImportStore(
                         }
                     }
 
+                    ImportSourceType.LX_MUSIC -> {
+                        val draft = editingLxMusicDraftOrNull(editor) ?: return
+                        runImport {
+                            repository.testUpdatedLxMusicSource(
+                                sourceId = editor.sourceId,
+                                draft = draft,
+                                keepExistingTokenWhenBlank = editor.keepExistingCredential,
+                            ).onSuccess {
+                                setTestMessage("LX 音源脚本桥接测试成功。")
+                            }.onFailure {
+                                setTestMessage("LX 音源脚本桥接测试失败: ${it.message}")
+                            }
+                        }
+                    }
+
                     ImportSourceType.LOCAL_FOLDER -> Unit
                 }
             }
@@ -677,6 +741,23 @@ class ImportStore(
                         }
                     }
 
+                    ImportSourceType.LX_MUSIC -> {
+                        val draft = editingLxMusicDraftOrNull(editor) ?: return
+                        runImport(ImportScanOperation.UpdateRemote(editor.sourceId)) {
+                            repository.updateLxMusicSource(
+                                sourceId = editor.sourceId,
+                                draft = draft,
+                                keepExistingTokenWhenBlank = editor.keepExistingCredential,
+                            ).onSuccess { summary ->
+                                updateState { it.copy(editingSource = null) }
+                                recordScanSummary(summary)
+                                setMessage("LX 音源已更新。")
+                            }.onFailure {
+                                setMessage("更新 LX 音源失败: ${it.message}")
+                            }
+                        }
+                    }
+
                     ImportSourceType.LOCAL_FOLDER -> Unit
                 }
             }
@@ -737,6 +818,9 @@ class ImportStore(
             is ImportIntent.EmbyWanBaseUrlChanged -> updateState { it.copy(embyWanBaseUrl = intent.value) }
             is ImportIntent.EmbyUsernameChanged -> updateState { it.copy(embyUsername = intent.value) }
             is ImportIntent.EmbyPasswordChanged -> updateState { it.copy(embyPassword = intent.value) }
+            is ImportIntent.LxMusicLabelChanged -> updateState { it.copy(lxMusicLabel = intent.value) }
+            is ImportIntent.LxMusicBridgeUrlChanged -> updateState { it.copy(lxMusicBridgeUrl = intent.value) }
+            is ImportIntent.LxMusicTokenChanged -> updateState { it.copy(lxMusicToken = intent.value) }
             is ImportIntent.RemoteSourceLabelChanged -> updateEditingSource { it.copy(label = intent.value) }
             is ImportIntent.RemoteSourceServerChanged -> updateEditingSource { it.copy(server = intent.value) }
             is ImportIntent.RemoteSourcePortChanged -> updateEditingSource { it.copy(port = intent.value) }
@@ -1043,6 +1127,31 @@ class ImportStore(
         )
     }
 
+    private fun lxMusicDraftOrNull(
+        label: String,
+        bridgeUrl: String,
+        token: String,
+        allowBlankToken: Boolean,
+    ): LxMusicSourceDraft? {
+        if (bridgeUrl.isBlank()) {
+            setCreateOrPageMessage(ImportSourceType.LX_MUSIC, "请先填写 LX 音源脚本桥接 URL。")
+            return null
+        }
+        if (!bridgeUrl.startsWith("http://") && !bridgeUrl.startsWith("https://")) {
+            setCreateOrPageMessage(ImportSourceType.LX_MUSIC, "LX 音源脚本桥接 URL 必须以 http:// 或 https:// 开头。")
+            return null
+        }
+        if (!allowBlankToken && token.isBlank()) {
+            setCreateOrPageMessage(ImportSourceType.LX_MUSIC, "请先填写 token。")
+            return null
+        }
+        return LxMusicSourceDraft(
+            label = label,
+            bridgeUrl = bridgeUrl,
+            token = token,
+        )
+    }
+
     private fun editingSambaDraftOrNull(editor: RemoteSourceEditorState): SambaSourceDraft? {
         val port = editor.port.trim().takeIf { it.isNotBlank() }?.toIntOrNull()
         if (editor.server.isBlank()) {
@@ -1126,6 +1235,15 @@ class ImportStore(
         )
     }
 
+    private fun editingLxMusicDraftOrNull(editor: RemoteSourceEditorState): LxMusicSourceDraft? {
+        return lxMusicDraftOrNull(
+            label = editor.label,
+            bridgeUrl = editor.rootUrl,
+            token = editor.password,
+            allowBlankToken = true,
+        )
+    }
+
     private fun updateEditingSource(transform: (RemoteSourceEditorState) -> RemoteSourceEditorState) {
         updateState { state ->
             state.copy(editingSource = state.editingSource?.let(transform))
@@ -1174,6 +1292,12 @@ class ImportStore(
                 embyWanBaseUrl = "",
                 embyUsername = "",
                 embyPassword = "",
+            )
+
+            ImportSourceType.LX_MUSIC -> copy(
+                lxMusicLabel = "",
+                lxMusicBridgeUrl = "",
+                lxMusicToken = "",
             )
 
             ImportSourceType.LOCAL_FOLDER -> this

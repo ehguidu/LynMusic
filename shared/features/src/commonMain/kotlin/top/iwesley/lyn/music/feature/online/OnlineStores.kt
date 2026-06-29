@@ -238,13 +238,13 @@ class OnlineLibraryStore(
         sources: List<SourceWithStatus>,
     ) {
         val rememberedSourceId = sourceId.normalizedSourceIdOrNull()
-        val validRememberedSourceId = rememberedSourceId?.takeIf { sources.hasOnlineNavidromeSource(it) }
+        val validRememberedSourceId = rememberedSourceId?.takeIf { sources.hasOnlineLibrarySource(it) }
         val currentSourceId = state.value.sourceId
         val rememberedSourceWasInvalid = rememberedSourceId != null && validRememberedSourceId == null
         if (rememberedSourceWasInvalid) {
             preferencesStore.setOnlineLibrarySourceId(null)
         }
-        if (currentSourceId != null && !sources.hasOnlineNavidromeSource(currentSourceId)) {
+        if (currentSourceId != null && !sources.hasOnlineLibrarySource(currentSourceId)) {
             if (hasTemporarySourceSelection && temporarySourceId == currentSourceId) {
                 hasTemporarySourceSelection = false
                 temporarySourceId = null
@@ -1734,6 +1734,16 @@ private fun List<SourceWithStatus>.hasOnlineNavidromeSource(sourceId: String): B
         source.id == sourceId &&
             source.enabled &&
             source.type == ImportSourceType.NAVIDROME &&
+            source.indexMode == ImportSourceIndexMode.ONLINE
+    }
+}
+
+private fun List<SourceWithStatus>.hasOnlineLibrarySource(sourceId: String): Boolean {
+    return any { item ->
+        val source = item.source
+        source.id == sourceId &&
+            source.enabled &&
+            (source.type == ImportSourceType.NAVIDROME || source.type == ImportSourceType.LX_MUSIC) &&
             source.indexMode == ImportSourceIndexMode.ONLINE
     }
 }

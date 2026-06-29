@@ -28,6 +28,7 @@ enum class ImportSourceType {
     NAVIDROME,
     SUBSONIC,
     EMBY,
+    LX_MUSIC,
 }
 
 enum class ImportSourceIndexMode {
@@ -223,6 +224,12 @@ data class EmbySourceDraft(
     val wanBaseUrl: String = "",
     val username: String,
     val password: String,
+)
+
+data class LxMusicSourceDraft(
+    val label: String,
+    val bridgeUrl: String,
+    val token: String = "",
 )
 
 data class ImportedTrackCandidate(
@@ -514,6 +521,7 @@ data class PlatformCapabilities(
     val supportsSystemMediaControls: Boolean,
     val supportsSubsonicImport: Boolean = supportsNavidromeImport,
     val supportsEmbyImport: Boolean = supportsNavidromeImport,
+    val supportsLxMusicImport: Boolean = supportsNavidromeImport,
     val supportsAppDisplayScaleAdjustment: Boolean = false,
     val supportsAndroidExtensionDecoder: Boolean = false,
     val supportsDesktopLyrics: Boolean = false,
@@ -753,4 +761,22 @@ object NavidromeLocatorRuntime {
     fun markResolvedUrlSuccess(candidate: RemotePlaybackUrlCandidate) {
         resolver?.markResolvedUrlSuccess(candidate)
     }
+}
+
+interface LxMusicLocatorResolver {
+    suspend fun resolveStreamUrl(track: Track, audioQuality: NavidromeAudioQuality): String?
+}
+
+object LxMusicLocatorRuntime {
+    @Volatile
+    private var resolver: LxMusicLocatorResolver? = null
+
+    fun install(resolver: LxMusicLocatorResolver) {
+        this.resolver = resolver
+    }
+
+    suspend fun resolveStreamUrl(
+        track: Track,
+        audioQuality: NavidromeAudioQuality = NavidromeAudioQuality.Original,
+    ): String? = resolver?.resolveStreamUrl(track, audioQuality)
 }

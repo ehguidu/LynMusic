@@ -330,6 +330,7 @@ class PlaylistsStore(
             LibrarySourceFilter.NAVIDROME,
             LibrarySourceFilter.SUBSONIC,
             LibrarySourceFilter.EMBY,
+            LibrarySourceFilter.LX_MUSIC,
         )
     }
 }

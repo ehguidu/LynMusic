@@ -10,12 +10,20 @@ private const val SUBSONIC_SCHEME = "lynmusic-subsonic://"
 private const val SUBSONIC_COVER_SCHEME = "lynmusic-subsonic-cover://"
 private const val EMBY_SCHEME = "lynmusic-emby://"
 private const val EMBY_COVER_SCHEME = "lynmusic-emby-cover://"
+private const val LX_MUSIC_SCHEME = "lynmusic-lx://"
 const val DEFAULT_SAMBA_PORT = 445
 
 data class SubsonicCompatibleLocator(
     val sourceId: String,
     val itemId: String,
     val sourceType: ImportSourceType,
+)
+
+data class LxMusicSongLocator(
+    val sourceId: String,
+    val platform: String,
+    val songId: String,
+    val rawMusicInfoJson: String? = null,
 )
 
 data class SambaPath(
@@ -196,6 +204,37 @@ fun buildEmbyCoverLocator(sourceId: String, itemId: String): String {
 
 fun parseEmbyCoverLocator(locator: String): Pair<String, String>? {
     return parseEmbyLocator(locator, EMBY_COVER_SCHEME)
+}
+
+fun buildLxMusicSongLocator(
+    sourceId: String,
+    platform: String,
+    songId: String,
+    rawMusicInfoJson: String? = null,
+): String {
+    val segments = listOfNotNull(
+        sourceId.encodeURLParameter(),
+        platform.encodeURLParameter(),
+        songId.encodeURLParameter(),
+        rawMusicInfoJson?.takeIf { it.isNotBlank() }?.encodeURLParameter(),
+    )
+    return LX_MUSIC_SCHEME + segments.joinToString("/")
+}
+
+fun parseLxMusicSongLocator(locator: String): LxMusicSongLocator? {
+    if (!locator.startsWith(LX_MUSIC_SCHEME)) return null
+    val segments = locator.removePrefix(LX_MUSIC_SCHEME).split("/")
+    if (segments.size < 3) return null
+    val sourceId = segments[0].decodeURLPart()
+    val platform = segments[1].decodeURLPart()
+    val songId = segments[2].decodeURLPart()
+    if (sourceId.isBlank() || platform.isBlank() || songId.isBlank()) return null
+    return LxMusicSongLocator(
+        sourceId = sourceId,
+        platform = platform,
+        songId = songId,
+        rawMusicInfoJson = segments.getOrNull(3)?.decodeURLPart()?.takeIf { it.isNotBlank() },
+    )
 }
 
 private fun parseNavidromeLocator(locator: String, scheme: String): Pair<String, String>? {

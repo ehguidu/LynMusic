@@ -1986,6 +1986,7 @@ private fun playlistSourceFilterButtonLabel(filter: LibrarySourceFilter): String
         LibrarySourceFilter.NAVIDROME -> "Navidrome"
         LibrarySourceFilter.SUBSONIC -> "Subsonic"
         LibrarySourceFilter.EMBY -> "Emby"
+        LibrarySourceFilter.LX_MUSIC -> "LX Music"
         LibrarySourceFilter.DOWNLOADED -> "已下载"
     }
 }

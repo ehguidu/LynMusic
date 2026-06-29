@@ -25,6 +25,7 @@ import kotlinx.coroutines.withContext
 import top.iwesley.lyn.music.core.model.DEFAULT_SAMBA_PORT
 import top.iwesley.lyn.music.core.model.DiagnosticLogger
 import top.iwesley.lyn.music.core.model.ImportSourceType
+import top.iwesley.lyn.music.core.model.LxMusicLocatorRuntime
 import top.iwesley.lyn.music.core.model.NavidromeAudioQuality
 import top.iwesley.lyn.music.core.model.OfflineDownloadStatus
 import top.iwesley.lyn.music.core.model.OfflineDownloadGateway
@@ -36,6 +37,7 @@ import top.iwesley.lyn.music.core.model.buildBasicAuthorizationHeader
 import top.iwesley.lyn.music.core.model.buildWebDavTrackUrl
 import top.iwesley.lyn.music.core.model.info
 import top.iwesley.lyn.music.core.model.parseEmbySongLocator
+import top.iwesley.lyn.music.core.model.parseLxMusicSongLocator
 import top.iwesley.lyn.music.core.model.parseSubsonicCompatibleSongLocator
 import top.iwesley.lyn.music.core.model.parseSambaLocator
 import top.iwesley.lyn.music.core.model.parseWebDavLocator
@@ -99,6 +101,19 @@ private class JvmOfflineDownloadGateway(
                         authorizationHeader = null,
                         allowInsecureTls = false,
                         target = partFile,
+                        onProgress = onProgress,
+                    )
+                }
+
+                parseLxMusicSongLocator(track.mediaLocator) != null -> {
+                    val requestUrl = LxMusicLocatorRuntime.resolveStreamUrl(track, quality)
+                        ?: error("LX 音源未返回可下载地址。")
+                    downloadHttpFile(
+                        requestUrl = requestUrl,
+                        authorizationHeader = null,
+                        allowInsecureTls = false,
+                        target = partFile,
+                        requestLogSource = "LX Music",
                         onProgress = onProgress,
                     )
                 }
@@ -430,6 +445,7 @@ private fun ImportSourceType.offlineDownloadLogSourceName(): String {
     return when (this) {
         ImportSourceType.NAVIDROME -> "Navidrome"
         ImportSourceType.SUBSONIC -> "Subsonic"
+        ImportSourceType.LX_MUSIC -> "LX Music"
         else -> name
     }
 }

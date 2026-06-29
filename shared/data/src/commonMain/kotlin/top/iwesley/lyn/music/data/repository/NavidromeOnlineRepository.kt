@@ -26,6 +26,7 @@ import top.iwesley.lyn.music.data.db.ImportSourceEntity
 import top.iwesley.lyn.music.data.db.LynMusicDatabase
 import top.iwesley.lyn.music.domain.NavidromeResolvedSource
 import top.iwesley.lyn.music.domain.RemoteSourceAddressSelector
+import top.iwesley.lyn.music.domain.searchLxMusicTracks
 import top.iwesley.lyn.music.domain.isSubsonicCompatibleSourceType
 import top.iwesley.lyn.music.domain.normalizeSubsonicBaseUrl
 import top.iwesley.lyn.music.domain.requestNavidromeJson
@@ -103,6 +104,9 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<Track> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val page = requestNavidromeSongPage(
             httpClient = httpClient,
@@ -125,6 +129,9 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<OnlineAlbumItem> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val payload = requestNavidromeJson(
             httpClient = httpClient,
@@ -150,6 +157,9 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<OnlineArtistItem> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val start = offset.coerceAtLeast(0)
         val limitValue = limit.coerceAtLeast(1)
@@ -202,6 +212,21 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlineLibrarySearchResult {
+        if (isOnlineLxMusicSource(sourceId)) {
+            val normalizedQuery = query.trim()
+            if (normalizedQuery.isBlank()) return OnlineLibrarySearchResult()
+            return OnlineLibrarySearchResult(
+                tracks = searchLxMusicTracks(
+                    database = database,
+                    secureCredentialStore = secureCredentialStore,
+                    httpClient = httpClient,
+                    sourceId = sourceId,
+                    query = normalizedQuery,
+                    offset = offset,
+                    limit = limit,
+                ).tracks,
+            )
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val normalizedQuery = query.trim()
         if (normalizedQuery.isBlank()) return OnlineLibrarySearchResult()
@@ -230,6 +255,29 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<Track> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            val normalizedQuery = query.trim()
+            val start = offset.coerceAtLeast(0)
+            val limitValue = limit.coerceAtLeast(1)
+            if (normalizedQuery.isBlank()) {
+                return OnlinePage(items = emptyList(), offset = start, limit = limitValue)
+            }
+            val page = searchLxMusicTracks(
+                database = database,
+                secureCredentialStore = secureCredentialStore,
+                httpClient = httpClient,
+                sourceId = sourceId,
+                query = normalizedQuery,
+                offset = start,
+                limit = limitValue,
+            )
+            return OnlinePage(
+                items = page.tracks,
+                totalCount = page.totalCount,
+                offset = start,
+                limit = limitValue,
+            )
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val normalizedQuery = query.trim()
         val start = offset.coerceAtLeast(0)
@@ -258,6 +306,9 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<OnlineAlbumItem> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val normalizedQuery = query.trim()
         val start = offset.coerceAtLeast(0)
@@ -286,6 +337,9 @@ class NavidromeOnlineRepository(
         offset: Int,
         limit: Int,
     ): OnlinePage<OnlineArtistItem> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val normalizedQuery = query.trim()
         val start = offset.coerceAtLeast(0)
@@ -309,6 +363,7 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun artistAlbums(sourceId: String, artistId: String): List<OnlineAlbumItem> {
+        if (isOnlineLxMusicSource(sourceId)) return emptyList()
         val source = requireOnlineNavidromeSource(sourceId)
         val payload = requestNavidromeJson(
             httpClient = httpClient,
@@ -355,6 +410,7 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun albumTracks(sourceId: String, albumId: String): List<Track> {
+        if (isOnlineLxMusicSource(sourceId)) return emptyList()
         val source = requireOnlineNavidromeSource(sourceId)
         val payload = requestNavidromeJson(
             httpClient = httpClient,
@@ -390,6 +446,9 @@ class NavidromeOnlineRepository(
         limit: Int,
         query: String,
     ): OnlinePage<Track> {
+        if (isOnlineLxMusicSource(sourceId)) {
+            return OnlinePage(items = emptyList(), offset = offset.coerceAtLeast(0), limit = limit.coerceAtLeast(1))
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val payload = requestNavidromeJson(
             httpClient = httpClient,
@@ -423,6 +482,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun setFavorite(sourceId: String, track: Track, favorite: Boolean) {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端收藏。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val parsed = parseSubsonicCompatibleSongLocator(track.mediaLocator)
             ?.takeIf { it.sourceId == sourceId }
@@ -438,11 +500,13 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun playlists(sourceId: String): List<PlaylistSummary> {
+        if (isOnlineLxMusicSource(sourceId)) return emptyList()
         val source = requireOnlineNavidromeSource(sourceId)
         return fetchRemotePlaylists(source)
     }
 
     override suspend fun playlistDetail(sourceId: String, playlistId: String): PlaylistDetail? {
+        if (isOnlineLxMusicSource(sourceId)) return null
         val source = requireOnlineNavidromeSource(sourceId)
         val payload = requestNavidromeJson(
             httpClient = httpClient,
@@ -468,6 +532,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun createPlaylist(sourceId: String, name: String): PlaylistSummary {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val displayName = name.trim()
         require(displayName.isNotBlank()) { "歌单名称不能为空。" }
@@ -485,6 +552,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun renamePlaylist(sourceId: String, playlistId: String, name: String) {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val displayName = name.trim()
         require(displayName.isNotBlank()) { "歌单名称不能为空。" }
@@ -499,6 +569,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun deletePlaylist(sourceId: String, playlistId: String) {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         requestNavidromeJson(
             httpClient = httpClient,
@@ -511,6 +584,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun addTrackToPlaylist(sourceId: String, playlistId: String, track: Track) {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val songId = track.onlineSongIdOrNull(sourceId)
             ?: error("在线歌曲缺少远端 song id。")
@@ -523,6 +599,9 @@ class NavidromeOnlineRepository(
         playlistId: String,
         text: String,
     ): PlaylistImportReport {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         val playlist = playlistDetail(sourceId, playlistId) ?: error("歌单不存在。")
         val currentMemberSongIds = playlist.tracks
@@ -723,6 +802,9 @@ class NavidromeOnlineRepository(
     }
 
     override suspend fun removeTrackFromPlaylist(sourceId: String, playlistId: String, index: Int) {
+        if (isOnlineLxMusicSource(sourceId)) {
+            error("LX 音源暂不支持远端歌单。")
+        }
         val source = requireOnlineNavidromeSource(sourceId)
         requestNavidromeJson(
             httpClient = httpClient,
@@ -773,6 +855,13 @@ class NavidromeOnlineRepository(
         }
         return entity.toSubsonicCompatibleResolvedSource()
             ?: error("Navidrome 来源缺少有效凭据。")
+    }
+
+    private suspend fun isOnlineLxMusicSource(sourceId: String): Boolean {
+        val entity = database.importSourceDao().getById(sourceId) ?: return false
+        return entity.enabled &&
+            entity.type == ImportSourceType.LX_MUSIC.name &&
+            entity.indexMode.toImportSourceIndexMode() == ImportSourceIndexMode.ONLINE
     }
 
     private suspend fun ImportSourceEntity.toSubsonicCompatibleResolvedSource(): NavidromeResolvedSource? {

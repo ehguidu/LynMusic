@@ -22,6 +22,7 @@ import top.iwesley.lyn.music.core.model.ImportSourceGateway
 import top.iwesley.lyn.music.core.model.LyricsShareFontLibraryPlatformService
 import top.iwesley.lyn.music.core.model.LyricsShareFontPreferencesStore
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
+import top.iwesley.lyn.music.core.model.LxMusicLocatorRuntime
 import top.iwesley.lyn.music.core.model.MenuBarLyricsControlsPreferencesStore
 import top.iwesley.lyn.music.core.model.MobileNetworkConnectionTypeProvider
 import top.iwesley.lyn.music.core.model.NavidromeAudioQualityPreferencesStore
@@ -88,6 +89,7 @@ import top.iwesley.lyn.music.domain.resolveEmbyCoverArtUrl
 import top.iwesley.lyn.music.domain.resolveEmbyCoverArtUrlCandidates
 import top.iwesley.lyn.music.domain.resolveEmbyStreamUrl
 import top.iwesley.lyn.music.domain.resolveEmbyStreamUrlCandidates
+import top.iwesley.lyn.music.domain.resolveLxMusicStreamUrl
 import top.iwesley.lyn.music.domain.RemoteSourceAddressSelector
 import top.iwesley.lyn.music.feature.favorites.FavoritesStore
 import top.iwesley.lyn.music.feature.importing.ImportStore
@@ -201,6 +203,7 @@ fun buildSharedGraph(
         database = database,
         gateway = runtimeServices.importSourceGateway,
         secureCredentialStore = runtimeServices.secureCredentialStore,
+        httpClient = runtimeServices.lyricsHttpClient,
         offlineDownloadGateway = runtimeServices.offlineDownloadGateway,
         addressSelector = runtimeServices.remoteSourceAddressSelector,
     )
@@ -291,6 +294,22 @@ fun buildSharedGraph(
                 candidate.sourceId.takeIf { it.isNotBlank() }?.let { sourceId ->
                     runtimeServices.remoteSourceAddressSelector.markSuccess(sourceId, kind)
                 }
+            }
+        },
+    )
+    LxMusicLocatorRuntime.install(
+        object : top.iwesley.lyn.music.core.model.LxMusicLocatorResolver {
+            override suspend fun resolveStreamUrl(
+                track: top.iwesley.lyn.music.core.model.Track,
+                audioQuality: top.iwesley.lyn.music.core.model.NavidromeAudioQuality,
+            ): String? {
+                return resolveLxMusicStreamUrl(
+                    database = database,
+                    secureCredentialStore = runtimeServices.secureCredentialStore,
+                    httpClient = runtimeServices.lyricsHttpClient,
+                    track = track,
+                    audioQuality = audioQuality,
+                )
             }
         },
     )

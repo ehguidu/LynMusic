@@ -183,7 +183,7 @@ internal fun LibraryTab(
     modifier: Modifier = Modifier,
 ) {
     val onlineSourceOptions = remember(importState.sources) {
-        importState.onlineNavidromeSourceOptions()
+        importState.onlineNavidromeSourceOptions(includeLxMusic = true)
     }
     val isOnlineMode = onlineState.sourceId != null
     val browserMessage = libraryTabBrowserMessage(
@@ -408,19 +408,23 @@ internal data class OnlineSourceOption(
     val label: String,
 )
 
-internal fun ImportState.onlineNavidromeSourceOptions(): List<OnlineSourceOption> {
+internal fun ImportState.onlineNavidromeSourceOptions(includeLxMusic: Boolean = false): List<OnlineSourceOption> {
     return sources
         .asSequence()
         .map { it.source }
         .filter {
             it.enabled &&
-                it.type == ImportSourceType.NAVIDROME &&
+                (it.type == ImportSourceType.NAVIDROME || (includeLxMusic && it.type == ImportSourceType.LX_MUSIC)) &&
                 it.indexMode == ImportSourceIndexMode.ONLINE
         }
         .map { source ->
             OnlineSourceOption(
                 sourceId = source.id,
-                label = source.label.trim().ifBlank { source.id } + " · 在线",
+                label = source.label.trim().ifBlank { source.id } + if (source.type == ImportSourceType.LX_MUSIC) {
+                    " · LX"
+                } else {
+                    " · 在线"
+                },
             )
         }
         .toList()
@@ -2436,6 +2440,7 @@ private fun librarySourceFilterButtonLabel(filter: LibrarySourceFilter): String 
         LibrarySourceFilter.NAVIDROME -> "Navidrome"
         LibrarySourceFilter.SUBSONIC -> "Subsonic"
         LibrarySourceFilter.EMBY -> "Emby"
+        LibrarySourceFilter.LX_MUSIC -> "LX Music"
         LibrarySourceFilter.DOWNLOADED -> "已下载"
     }
 }
@@ -2656,6 +2661,7 @@ internal fun SourcesTab(
     val isNavidromeCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.NAVIDROME)
     val isSubsonicCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.SUBSONIC)
     val isEmbyCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.EMBY)
+    val isLxMusicCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.LX_MUSIC)
     val isSambaCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.SAMBA)
     val isWebDavCreating = activeScanOperation == ImportScanOperation.CreateRemote(ImportSourceType.WEBDAV)
     val activeScanProgress = state.scanProgress
@@ -2800,7 +2806,7 @@ internal fun SourcesTab(
         ) {
             SectionTitle(
                 title = "导入来源",
-                subtitle = "本地文件夹原地索引，Samba、WebDAV、Navidrome、Subsonic/OpenSubsonic 与 Emby 作为远程音乐库。"
+                subtitle = "本地文件夹原地索引，Samba、WebDAV、Navidrome、Subsonic/OpenSubsonic、Emby 与 LX Music 作为远程音乐库。"
             )
             state.message?.let { message ->
                 BannerCard(message = message, onDismiss = { onImportIntent(ImportIntent.ClearMessage) })
@@ -2856,6 +2862,62 @@ internal fun SourcesTab(
                         }
                         Spacer(Modifier.width(8.dp))
                         Text(if (isLocalFolderScanning) "扫描中" else "选择文件夹")
+                    }
+                }
+            }
+            MainShellElevatedCard(shape = RoundedCornerShape(28.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("LX Music", fontWeight = FontWeight.Bold)
+                    if (!state.capabilities.supportsLxMusicImport) {
+                        Text("当前平台暂未开放应用内 LX Music 音源。")
+                    }
+                    ImeAwareOutlinedTextField(
+                        value = state.lxMusicLabel,
+                        onValueChange = { onImportIntent(ImportIntent.LxMusicLabelChanged(it)) },
+                        label = { Text("名称") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = importFieldColors,
+                    )
+                    ImeAwareOutlinedTextField(
+                        value = state.lxMusicBridgeUrl,
+                        onValueChange = { onImportIntent(ImportIntent.LxMusicBridgeUrlChanged(it)) },
+                        label = { Text("脚本桥接 URL") },
+                        placeholder = { Text("http://127.0.0.1:9763/lx") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = importFieldColors,
+                    )
+                    ImeAwareOutlinedTextField(
+                        value = state.lxMusicToken,
+                        onValueChange = { onImportIntent(ImportIntent.LxMusicTokenChanged(it)) },
+                        label = { Text("Token（选填）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = importFieldColors,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { onImportIntent(ImportIntent.TestLxMusicSource) },
+                            enabled = state.capabilities.supportsLxMusicImport && !state.isWorking,
+                        ) {
+                            Text("测试连接")
+                        }
+                        Button(
+                            onClick = { onImportIntent(ImportIntent.AddLxMusicSource) },
+                            enabled = state.capabilities.supportsLxMusicImport && !state.isWorking,
+                        ) {
+                            if (isLxMusicCreating) {
+                                ButtonLoadingIndicator()
+                            } else {
+                                Icon(Icons.Rounded.CloudSync, null)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (isLxMusicCreating) "启用中" else "启用在线源")
+                        }
                     }
                 }
             }
@@ -3627,6 +3689,7 @@ private fun RemoteSourceEditorDialog(
                                     ImportSourceType.NAVIDROME -> "编辑 Navidrome 来源"
                                     ImportSourceType.SUBSONIC -> "编辑 Subsonic 来源"
                                     ImportSourceType.EMBY -> "编辑 Emby 来源"
+                                    ImportSourceType.LX_MUSIC -> "编辑 LX Music 来源"
                                     ImportSourceType.LOCAL_FOLDER -> "编辑来源"
                                 },
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -3709,23 +3772,26 @@ private fun RemoteSourceEditorDialog(
                                 ImportSourceType.NAVIDROME,
                                 ImportSourceType.SUBSONIC,
                                 ImportSourceType.EMBY,
+                                ImportSourceType.LX_MUSIC,
                                 -> {
                                     ImeAwareOutlinedTextField(
                                         value = state.rootUrl,
                                         onValueChange = { onIntent(ImportIntent.RemoteSourceRootUrlChanged(it)) },
-                                        label = { Text("局域网/首选地址") },
+                                        label = { Text(if (state.type == ImportSourceType.LX_MUSIC) "脚本桥接 URL" else "局域网/首选地址") },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(18.dp),
                                         colors = fieldColors,
                                     )
-                                    ImeAwareOutlinedTextField(
-                                        value = state.wanRootUrl,
-                                        onValueChange = { onIntent(ImportIntent.RemoteSourceWanRootUrlChanged(it)) },
-                                        label = { Text("广域网地址") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(18.dp),
-                                        colors = fieldColors,
-                                    )
+                                    if (state.type != ImportSourceType.LX_MUSIC) {
+                                        ImeAwareOutlinedTextField(
+                                            value = state.wanRootUrl,
+                                            onValueChange = { onIntent(ImportIntent.RemoteSourceWanRootUrlChanged(it)) },
+                                            label = { Text("广域网地址") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(18.dp),
+                                            colors = fieldColors,
+                                        )
+                                    }
                                 }
 
                                 ImportSourceType.LOCAL_FOLDER -> Unit
@@ -3737,7 +3803,18 @@ private fun RemoteSourceEditorDialog(
                                     onSelect = { onIntent(ImportIntent.RemoteSourceSubsonicAuthModeChanged(it)) },
                                 )
                             }
-                            if (state.type == ImportSourceType.SUBSONIC && state.subsonicAuthMode == SubsonicAuthMode.API_KEY) {
+                            if (state.type == ImportSourceType.LX_MUSIC) {
+                                ImeAwareOutlinedTextField(
+                                    value = state.password,
+                                    onValueChange = { onIntent(ImportIntent.RemoteSourcePasswordChanged(it)) },
+                                    label = {
+                                        Text(if (state.hasStoredCredential) "Token（留空沿用）" else "Token（选填）")
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = fieldColors,
+                                )
+                            } else if (state.type == ImportSourceType.SUBSONIC && state.subsonicAuthMode == SubsonicAuthMode.API_KEY) {
                                 ImeAwareOutlinedTextField(
                                     value = state.password,
                                     onValueChange = { onIntent(ImportIntent.RemoteSourcePasswordChanged(it)) },

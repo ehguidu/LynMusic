@@ -70,6 +70,7 @@ import top.iwesley.lyn.music.core.model.LocalFolderSelection
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
 import top.iwesley.lyn.music.core.model.LyricsHttpResponse
 import top.iwesley.lyn.music.core.model.LyricsRequest
+import top.iwesley.lyn.music.core.model.LxMusicLocatorRuntime
 import top.iwesley.lyn.music.core.model.MenuBarLyricsControlsPreferencesStore
 import top.iwesley.lyn.music.core.model.NavidromeAudioQuality
 import top.iwesley.lyn.music.core.model.NavidromeLibraryProbe
@@ -122,6 +123,7 @@ import top.iwesley.lyn.music.core.model.parseSambaLocator
 import top.iwesley.lyn.music.core.model.parseSambaPath
 import top.iwesley.lyn.music.core.model.parseEmbyCoverLocator
 import top.iwesley.lyn.music.core.model.parseEmbySongLocator
+import top.iwesley.lyn.music.core.model.parseLxMusicSongLocator
 import top.iwesley.lyn.music.core.model.parseSubsonicCompatibleCoverLocator
 import top.iwesley.lyn.music.core.model.parseSubsonicCompatibleSongLocator
 import top.iwesley.lyn.music.core.model.parseWebDavLocator
@@ -2059,13 +2061,19 @@ internal class JvmPlaybackGateway(
             } else {
                 null
             }
+            val isLxMusicTrack = parseLxMusicSongLocator(track.mediaLocator) != null
             val currentNavidromeAudioQuality =
-                if (offlineTarget == null && webDavTarget == null && sambaTarget == null && parseSubsonicCompatibleSongLocator(track.mediaLocator) != null) {
+                if (
+                    offlineTarget == null &&
+                    webDavTarget == null &&
+                    sambaTarget == null &&
+                    (parseSubsonicCompatibleSongLocator(track.mediaLocator) != null || isLxMusicTrack)
+                ) {
                     NavidromeAudioQuality.Original
                 } else {
                     null
                 }
-            val remotePlaybackCandidates = if (offlineTarget == null && webDavTarget == null && sambaTarget == null) {
+            val remotePlaybackCandidates = if (offlineTarget == null && webDavTarget == null && sambaTarget == null && !isLxMusicTrack) {
                 resolveLocatorCandidates(track.mediaLocator)
             } else {
                 null
@@ -2076,12 +2084,15 @@ internal class JvmPlaybackGateway(
                 sambaTarget != null -> sambaTarget.sourceReference
                 webDavTarget != null -> webDavTarget.requestUrl
                 selectedRemotePlaybackCandidate != null -> selectedRemotePlaybackCandidate.value
+                isLxMusicTrack -> LxMusicLocatorRuntime.resolveStreamUrl(track, NavidromeAudioQuality.Original)
+                    ?: error("LX 音源未返回可播放地址。")
                 else -> resolveLocator(track.mediaLocator)
             }
             val sourceReference = when {
                 offlineTarget != null -> track.mediaLocator
                 parseSubsonicCompatibleSongLocator(track.mediaLocator) != null -> track.mediaLocator
                 parseEmbySongLocator(track.mediaLocator) != null -> track.mediaLocator
+                isLxMusicTrack -> track.mediaLocator
                 else -> actualPlaybackSource
             }
             if (!loadToken.isCurrent()) {

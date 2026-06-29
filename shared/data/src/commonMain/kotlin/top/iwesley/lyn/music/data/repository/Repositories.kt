@@ -43,6 +43,7 @@ import top.iwesley.lyn.music.core.model.LocalFolderSelection
 import top.iwesley.lyn.music.core.model.EmbySourceDraft
 import top.iwesley.lyn.music.core.model.LyricsDocument
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
+import top.iwesley.lyn.music.core.model.LyricsHttpResponse
 import top.iwesley.lyn.music.core.model.LyricsLookupMetadata
 import top.iwesley.lyn.music.core.model.LyricsSearchApplyMode
 import top.iwesley.lyn.music.core.model.LyricsResponseFormat
@@ -55,6 +56,7 @@ import top.iwesley.lyn.music.core.model.NavidromeAudioQualityPreferencesStore
 import top.iwesley.lyn.music.core.model.NavidromeLibraryProbe
 import top.iwesley.lyn.music.core.model.NavidromeLocatorRuntime
 import top.iwesley.lyn.music.core.model.NavidromeSourceDraft
+import top.iwesley.lyn.music.core.model.LxMusicSourceDraft
 import top.iwesley.lyn.music.core.model.NoopDiagnosticLogger
 import top.iwesley.lyn.music.core.model.OfflineDownloadGateway
 import top.iwesley.lyn.music.core.model.PlaybackDecoderPreferencesStore
@@ -130,6 +132,7 @@ import top.iwesley.lyn.music.domain.normalizeEmbyBaseUrl
 import top.iwesley.lyn.music.domain.normalizeRemoteSourceBaseUrls
 import top.iwesley.lyn.music.domain.requestNavidromeLyrics
 import top.iwesley.lyn.music.domain.requestEmbyLyricsDocument as requestEmbyServerLyricsDocument
+import top.iwesley.lyn.music.domain.testLxMusicBridge
 import top.iwesley.lyn.music.domain.RemoteSourceAddressSelector
 import top.iwesley.lyn.music.domain.resolveEmbyDeviceId
 import top.iwesley.lyn.music.domain.resolveNavidromeCoverArtUrl
@@ -366,6 +369,26 @@ interface ImportSourceRepository {
     ): Result<ImportScanSummary> {
         return updateEmbySource(sourceId, draft, keepExistingCredentialWhenBlankPassword)
     }
+    suspend fun testLxMusicSource(draft: LxMusicSourceDraft): Result<Unit> {
+        return Result.failure(UnsupportedOperationException("LX Music source is not supported."))
+    }
+    suspend fun testUpdatedLxMusicSource(
+        sourceId: String,
+        draft: LxMusicSourceDraft,
+        keepExistingTokenWhenBlank: Boolean = true,
+    ): Result<Unit> {
+        return Result.failure(UnsupportedOperationException("LX Music source is not supported."))
+    }
+    suspend fun addLxMusicSource(draft: LxMusicSourceDraft): Result<ImportScanSummary> {
+        return Result.failure(UnsupportedOperationException("LX Music source is not supported."))
+    }
+    suspend fun updateLxMusicSource(
+        sourceId: String,
+        draft: LxMusicSourceDraft,
+        keepExistingTokenWhenBlank: Boolean = true,
+    ): Result<ImportScanSummary> {
+        return Result.failure(UnsupportedOperationException("LX Music source is not supported."))
+    }
     suspend fun rescanSource(sourceId: String): Result<ImportScanSummary?>
     suspend fun rescanSource(
         sourceId: String,
@@ -550,6 +573,7 @@ class RoomImportSourceRepository(
     private val secureCredentialStore: SecureCredentialStore,
     private val offlineDownloadGateway: OfflineDownloadGateway = UnsupportedOfflineDownloadGateway,
     private val addressSelector: RemoteSourceAddressSelector = RemoteSourceAddressSelector(),
+    private val httpClient: LyricsHttpClient = UnsupportedRepositoryHttpClient,
 ) : ImportSourceRepository {
     private val navidromeScanLocks = mutableMapOf<String, Mutex>()
     private val navidromeScanLocksMutex = Mutex()
@@ -1352,6 +1376,92 @@ class RoomImportSourceRepository(
         }
     }
 
+    override suspend fun testLxMusicSource(draft: LxMusicSourceDraft): Result<Unit> {
+        return runCatching {
+            val preparedDraft = prepareLxMusicDraft(draft)
+            testLxMusicBridge(
+                httpClient = httpClient,
+                bridgeUrl = preparedDraft.bridgeUrl,
+                token = preparedDraft.token,
+            )
+        }
+    }
+
+    override suspend fun testUpdatedLxMusicSource(
+        sourceId: String,
+        draft: LxMusicSourceDraft,
+        keepExistingTokenWhenBlank: Boolean,
+    ): Result<Unit> {
+        return runCatching {
+            val existing = requireRemoteSource(sourceId, ImportSourceType.LX_MUSIC)
+            val preparedDraft = prepareLxMusicDraft(draft)
+            val token = resolveUpdatedPassword(
+                existingCredentialKey = existing.credentialKey,
+                password = preparedDraft.token,
+                keepExistingCredentialWhenBlankPassword = keepExistingTokenWhenBlank,
+            )
+            testLxMusicBridge(
+                httpClient = httpClient,
+                bridgeUrl = preparedDraft.bridgeUrl,
+                token = token,
+            )
+        }
+    }
+
+    override suspend fun addLxMusicSource(draft: LxMusicSourceDraft): Result<ImportScanSummary> {
+        return runCatching {
+            val sourceId = newId("lx")
+            val preparedDraft = prepareLxMusicDraft(draft)
+            val credentialKey = credentialKeyForNewSource(preparedDraft.token, sourceId)
+            val source = createLxMusicSource(sourceId, preparedDraft)
+                .copy(credentialKey = credentialKey)
+            validateImportSourceCreation(label = source.label)
+            persistOnlineNavidromeSourceWithCredential(
+                source = source,
+                remoteTrackCount = null,
+                credential = preparedDraft.token,
+                shouldWriteCredential = credentialKey != null,
+                previousCredentialKey = null,
+            )
+        }
+    }
+
+    override suspend fun updateLxMusicSource(
+        sourceId: String,
+        draft: LxMusicSourceDraft,
+        keepExistingTokenWhenBlank: Boolean,
+    ): Result<ImportScanSummary> {
+        return runCatching {
+            val existing = requireRemoteSource(sourceId, ImportSourceType.LX_MUSIC)
+            val preparedDraft = prepareLxMusicDraft(draft)
+            val updatedSource = createLxMusicSource(
+                sourceId = existing.id,
+                draft = preparedDraft,
+                createdAt = existing.createdAt,
+                enabled = existing.enabled,
+            )
+            assertUniqueImportSourceLabel(updatedSource.label, excludingSourceId = existing.id)
+            val token = resolveUpdatedPassword(
+                existingCredentialKey = existing.credentialKey,
+                password = preparedDraft.token,
+                keepExistingCredentialWhenBlankPassword = keepExistingTokenWhenBlank,
+            )
+            val credentialKey = resolveUpdatedCredentialKey(
+                sourceId = sourceId,
+                existingCredentialKey = existing.credentialKey,
+                password = token,
+                keepExistingCredentialWhenBlankPassword = keepExistingTokenWhenBlank,
+            )
+            persistOnlineNavidromeSourceWithCredential(
+                source = updatedSource.copy(credentialKey = credentialKey),
+                remoteTrackCount = null,
+                credential = token,
+                shouldWriteCredential = credentialKey != null && token.isNotBlank(),
+                previousCredentialKey = existing.credentialKey,
+            )
+        }
+    }
+
     override suspend fun rescanSource(sourceId: String): Result<ImportScanSummary?> {
         return rescanSource(sourceId, ImportScanProgressSink.NoOp)
     }
@@ -1396,6 +1506,12 @@ class RoomImportSourceRepository(
                     )
                 }
                 return@runCatching rescanNavidromeSource(source, progressSink)
+            }
+            if (source.type == ImportSourceType.LX_MUSIC) {
+                return@runCatching persistOnlineNavidromeSource(
+                    source = source.copy(indexMode = ImportSourceIndexMode.ONLINE),
+                    remoteTrackCount = null,
+                )
             }
             val summary = runScan(source.copy(lastScannedAt = now()), progressSink) {
                 when (source.type) {
@@ -1491,6 +1607,10 @@ class RoomImportSourceRepository(
                                 progressSink = progressSink,
                             )
                         }
+                    }
+
+                    ImportSourceType.LX_MUSIC -> {
+                        error("LX Music online source should have been handled before generic rescan.")
                     }
                 }
             }
@@ -1621,6 +1741,18 @@ class RoomImportSourceRepository(
         )
     }
 
+    private fun prepareLxMusicDraft(draft: LxMusicSourceDraft): LxMusicSourceDraft {
+        return draft.copy(
+            label = draft.label.trim(),
+            bridgeUrl = draft.bridgeUrl.trim().trimEnd('/'),
+            token = draft.token.trim(),
+        ).also {
+            require(it.bridgeUrl.startsWith("http://") || it.bridgeUrl.startsWith("https://")) {
+                "LX 音源脚本桥接地址必须是 http(s) URL。"
+            }
+        }
+    }
+
     private fun createSambaSource(
         sourceId: String,
         draft: SambaSourceDraft,
@@ -1724,6 +1856,24 @@ class RoomImportSourceRepository(
             username = draft.username,
             createdAt = createdAt,
             enabled = enabled,
+        )
+    }
+
+    private fun createLxMusicSource(
+        sourceId: String,
+        draft: LxMusicSourceDraft,
+        createdAt: Long = now(),
+        enabled: Boolean = true,
+    ): ImportSource {
+        val label = draft.label.ifBlank { "LX Music" }
+        return ImportSource(
+            id = sourceId,
+            type = ImportSourceType.LX_MUSIC,
+            label = label,
+            rootReference = draft.bridgeUrl,
+            createdAt = createdAt,
+            enabled = enabled,
+            indexMode = ImportSourceIndexMode.ONLINE,
         )
     }
 
@@ -3929,6 +4079,12 @@ private sealed interface SameNameLyricsLookup {
 }
 
 internal fun now(): Long = Clock.System.now().toEpochMilliseconds()
+
+private object UnsupportedRepositoryHttpClient : LyricsHttpClient {
+    override suspend fun request(request: top.iwesley.lyn.music.core.model.LyricsRequest): Result<LyricsHttpResponse> {
+        return Result.failure(UnsupportedOperationException("HTTP client is not configured."))
+    }
+}
 
 private fun Throwable.throwIfCancellation() {
     if (this is CancellationException) throw this

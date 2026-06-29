@@ -232,6 +232,7 @@ private fun mobileLibraryHubSourceFilterButtonLabel(filter: LibrarySourceFilter)
         LibrarySourceFilter.NAVIDROME -> "Navidrome"
         LibrarySourceFilter.SUBSONIC -> "Subsonic"
         LibrarySourceFilter.EMBY -> "Emby"
+        LibrarySourceFilter.LX_MUSIC -> "LX Music"
         LibrarySourceFilter.DOWNLOADED -> "已下载"
     }
 }
@@ -1157,7 +1158,7 @@ private fun MobileLibraryHubTab(
                     AppTab.Library -> MobileLibraryHubSourceMenu(
                         selectedSourceFilter = libraryState.selectedSourceFilter,
                         availableSourceFilters = libraryState.availableSourceFilters,
-                        onlineSourceOptions = importState.onlineNavidromeSourceOptions(),
+                        onlineSourceOptions = importState.onlineNavidromeSourceOptions(includeLxMusic = true),
                         selectedOnlineSourceId = onlineLibraryState.sourceId,
                         onSourceFilterChanged = { filter ->
                             onOnlineLibraryIntent(OnlineLibraryIntent.SelectSource(sourceId = null))

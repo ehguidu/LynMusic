@@ -92,6 +92,7 @@ import top.iwesley.lyn.music.core.model.LocalFolderSelection
 import top.iwesley.lyn.music.core.model.LyricsHttpClient
 import top.iwesley.lyn.music.core.model.LyricsHttpResponse
 import top.iwesley.lyn.music.core.model.LyricsRequest
+import top.iwesley.lyn.music.core.model.LxMusicLocatorRuntime
 import top.iwesley.lyn.music.core.model.NavidromeAudioQuality
 import top.iwesley.lyn.music.core.model.NavidromeAudioQualityPreferencesStore
 import top.iwesley.lyn.music.core.model.NavidromeLibraryProbe
@@ -144,6 +145,7 @@ import top.iwesley.lyn.music.core.model.info
 import top.iwesley.lyn.music.core.model.joinSambaPath
 import top.iwesley.lyn.music.core.model.normalizeSambaPath
 import top.iwesley.lyn.music.core.model.parseEmbySongLocator
+import top.iwesley.lyn.music.core.model.parseLxMusicSongLocator
 import top.iwesley.lyn.music.core.model.parseSubsonicCompatibleSongLocator
 import top.iwesley.lyn.music.core.model.parseSambaLocator
 import top.iwesley.lyn.music.core.model.parseSambaPath
@@ -2505,6 +2507,7 @@ internal class AndroidPlaybackGateway(
         try {
             val offlineTarget = resolveAndroidOfflinePlaybackTarget(database, track)
             val isSubsonicCompatibleTrack = parseSubsonicCompatibleSongLocator(track.mediaLocator) != null
+            val isLxMusicTrack = parseLxMusicSongLocator(track.mediaLocator) != null
             val webDavTarget = if (offlineTarget == null) resolveAndroidWebDavPlaybackTarget(
                 database = database,
                 secureCredentialStore = secureCredentialStore,
@@ -2542,9 +2545,13 @@ internal class AndroidPlaybackGateway(
                     preferencesStore = navidromeAudioQualityPreferencesStore,
                     networkConnectionTypeProvider = networkConnectionTypeProvider,
                 )
+                isLxMusicTrack -> resolveNavidromeAudioQualityForCurrentNetwork(
+                    preferencesStore = navidromeAudioQualityPreferencesStore,
+                    networkConnectionTypeProvider = networkConnectionTypeProvider,
+                )
                 else -> null
             }
-            val remotePlaybackCandidates = if (offlineTarget == null && webDavTarget == null && sambaTarget == null) {
+            val remotePlaybackCandidates = if (offlineTarget == null && webDavTarget == null && sambaTarget == null && !isLxMusicTrack) {
                 resolveLocatorCandidates(track.mediaLocator, navidromeAudioQuality)
             } else {
                 null
@@ -2553,6 +2560,16 @@ internal class AndroidPlaybackGateway(
                 Uri.fromFile(offlineTarget.file)
             } else if (webDavTarget == null && sambaTarget == null) {
                 remotePlaybackCandidates?.firstOrNull()?.value?.let(Uri::parse)
+                    ?: if (isLxMusicTrack) {
+                        Uri.parse(
+                            LxMusicLocatorRuntime.resolveStreamUrl(
+                                track,
+                                navidromeAudioQuality ?: NavidromeAudioQuality.Original,
+                            ) ?: error("LX 音源未返回可播放地址。"),
+                        )
+                    } else {
+                        null
+                    }
                     ?: resolveLocator(track.mediaLocator, navidromeAudioQuality)
             } else {
                 null
@@ -2589,10 +2606,12 @@ internal class AndroidPlaybackGateway(
                         else -> null
                     } ?: if (parseEmbySongLocator(track.mediaLocator) != null) {
                         "Emby"
+                    } else if (isLxMusicTrack) {
+                        "LX Music"
                     } else {
                         null
                     }
-                    currentRemoteLabel = if (subsonicCompatible != null || parseEmbySongLocator(track.mediaLocator) != null) {
+                    currentRemoteLabel = if (subsonicCompatible != null || parseEmbySongLocator(track.mediaLocator) != null || isLxMusicTrack) {
                         track.mediaLocator
                     } else {
                         null

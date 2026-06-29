@@ -28,6 +28,7 @@ enum class LibrarySourceFilter {
     NAVIDROME,
     SUBSONIC,
     EMBY,
+    LX_MUSIC,
     DOWNLOADED,
 }
 
@@ -250,6 +251,7 @@ class LibraryStore(
             LibrarySourceFilter.NAVIDROME,
             LibrarySourceFilter.SUBSONIC,
             LibrarySourceFilter.EMBY,
+            LibrarySourceFilter.LX_MUSIC,
         )
     }
 }
@@ -293,6 +295,7 @@ fun ImportSourceType.toLibrarySourceFilter(): LibrarySourceFilter {
         ImportSourceType.NAVIDROME -> LibrarySourceFilter.NAVIDROME
         ImportSourceType.SUBSONIC -> LibrarySourceFilter.SUBSONIC
         ImportSourceType.EMBY -> LibrarySourceFilter.EMBY
+        ImportSourceType.LX_MUSIC -> LibrarySourceFilter.LX_MUSIC
     }
 }
 
