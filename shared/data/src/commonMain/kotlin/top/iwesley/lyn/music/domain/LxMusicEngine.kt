@@ -251,7 +251,7 @@ private fun JsonElement?.asObjectList(): List<JsonObject> {
     }
 }
 
-private fun JsonElement.urlStringOrNull(): String? {
+private fun JsonElement?.urlStringOrNull(): String? {
     return when (this) {
         is JsonPrimitive -> contentOrNull?.trim()?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
         is JsonObject -> string("url")
