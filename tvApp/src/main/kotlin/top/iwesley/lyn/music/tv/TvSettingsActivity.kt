@@ -701,6 +701,16 @@ private fun TvAddSourcePanel(
                         ) {
                             onIntent(ImportIntent.OpenRemoteSourceCreator(ImportSourceType.EMBY))
                         }
+
+                        "sources:add:lx" -> TvAddTypeButton(
+                            label = "LX Music",
+                            selected = state.creatingSourceType == ImportSourceType.LX_MUSIC,
+                            focusKey = focusKey,
+                            focusChain = focusChain,
+                            restoreFocusAfterClick = false,
+                        ) {
+                            onIntent(ImportIntent.OpenRemoteSourceCreator(ImportSourceType.LX_MUSIC))
+                        }
                     }
                 }
             }
@@ -727,6 +737,9 @@ private fun addSourceFocusRows(capabilities: PlatformCapabilities): List<List<St
         }
         if (capabilities.supportsEmbyImport) {
             add("sources:add:emby")
+        }
+        if (capabilities.supportsLxMusicImport) {
+            add("sources:add:lx")
         }
     }
     return keys.chunked(3)
@@ -913,6 +926,13 @@ private fun TvRemoteSourceCreatorDialog(
                             focusChain = focusChain,
                         )
 
+                        ImportSourceType.LX_MUSIC -> TvLxMusicSourceForm(
+                            state = state,
+                            onIntent = onIntent,
+                            focusPrefix = focusPrefix,
+                            focusChain = focusChain,
+                        )
+
                         ImportSourceType.LOCAL_FOLDER -> Unit
                     }
                 }
@@ -942,6 +962,7 @@ private fun TvRemoteSourceCreatorDialog(
                                 ImportSourceType.NAVIDROME -> onIntent(ImportIntent.TestNavidromeSource)
                                 ImportSourceType.SUBSONIC -> onIntent(ImportIntent.TestSubsonicSource)
                                 ImportSourceType.EMBY -> onIntent(ImportIntent.TestEmbySource)
+                                ImportSourceType.LX_MUSIC -> onIntent(ImportIntent.TestLxMusicSource)
                                 ImportSourceType.LOCAL_FOLDER -> Unit
                             }
                         },
@@ -966,6 +987,7 @@ private fun TvRemoteSourceCreatorDialog(
                                 ImportSourceType.NAVIDROME -> onIntent(ImportIntent.AddNavidromeSource)
                                 ImportSourceType.SUBSONIC -> onIntent(ImportIntent.AddSubsonicSource)
                                 ImportSourceType.EMBY -> onIntent(ImportIntent.AddEmbySource)
+                                ImportSourceType.LX_MUSIC -> onIntent(ImportIntent.AddLxMusicSource)
                                 ImportSourceType.LOCAL_FOLDER -> Unit
                             }
                         },
@@ -1023,6 +1045,13 @@ private fun remoteSourceDialogFocusRows(
             listOf("$prefix:label"),
             listOf("$prefix:root"),
             listOf("$prefix:username", "$prefix:password"),
+            buttons,
+        )
+
+        ImportSourceType.LX_MUSIC -> listOf(
+            listOf("$prefix:label"),
+            listOf("$prefix:root"),
+            listOf("$prefix:password"),
             buttons,
         )
 
@@ -1313,6 +1342,42 @@ private fun TvEmbySourceForm(
 }
 
 @Composable
+private fun TvLxMusicSourceForm(
+    state: ImportState,
+    onIntent: (ImportIntent) -> Unit,
+    focusPrefix: String,
+    focusChain: TvSettingsFocusChain,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TvSettingsTextField(
+            label = "名称",
+            value = state.lxMusicLabel,
+            onValueChange = { onIntent(ImportIntent.LxMusicLabelChanged(it)) },
+            placeholder = "LX Music",
+            focusKey = "$focusPrefix:label",
+            focusChain = focusChain,
+        )
+        TvSettingsTextField(
+            label = "脚本桥接 URL",
+            value = state.lxMusicBridgeUrl,
+            onValueChange = { onIntent(ImportIntent.LxMusicBridgeUrlChanged(it)) },
+            placeholder = "http://192.168.31.115:3300",
+            focusKey = "$focusPrefix:root",
+            focusChain = focusChain,
+        )
+        TvSettingsTextField(
+            label = "Token",
+            value = state.lxMusicToken,
+            onValueChange = { onIntent(ImportIntent.LxMusicTokenChanged(it)) },
+            placeholder = "选填",
+            password = true,
+            focusKey = "$focusPrefix:password",
+            focusChain = focusChain,
+        )
+    }
+}
+
+@Composable
 private fun TvSourceCard(
     sourceWithStatus: SourceWithStatus,
     latestSummary: top.iwesley.lyn.music.core.model.ImportScanSummary?,
@@ -1540,6 +1605,16 @@ private fun TvRemoteSourceEditorDialog(
                             )
                         }
 
+                        ImportSourceType.LX_MUSIC -> {
+                            TvSettingsTextField(
+                                label = "脚本桥接 URL",
+                                value = editor.rootUrl,
+                                onValueChange = { onIntent(ImportIntent.RemoteSourceRootUrlChanged(it)) },
+                                focusKey = "$focusPrefix:root",
+                                focusChain = focusChain,
+                            )
+                        }
+
                         ImportSourceType.LOCAL_FOLDER -> Unit
                     }
                     if (editor.type == ImportSourceType.SUBSONIC) {
@@ -1557,7 +1632,17 @@ private fun TvRemoteSourceEditorDialog(
                             focusChain = focusChain,
                         )
                     }
-                    if (editor.type == ImportSourceType.SUBSONIC && editor.subsonicAuthMode == SubsonicAuthMode.API_KEY) {
+                    if (editor.type == ImportSourceType.LX_MUSIC) {
+                        TvSettingsTextField(
+                            label = "Token",
+                            value = editor.password,
+                            onValueChange = { onIntent(ImportIntent.RemoteSourcePasswordChanged(it)) },
+                            placeholder = if (editor.hasStoredCredential) "留空则沿用已保存 Token" else "选填",
+                            password = true,
+                            focusKey = "$focusPrefix:password",
+                            focusChain = focusChain,
+                        )
+                    } else if (editor.type == ImportSourceType.SUBSONIC && editor.subsonicAuthMode == SubsonicAuthMode.API_KEY) {
                         TvSettingsTextField(
                             label = "API Key",
                             value = editor.password,
@@ -2784,6 +2869,7 @@ private fun sourceTypeTitle(type: ImportSourceType): String {
         ImportSourceType.NAVIDROME -> "Navidrome"
         ImportSourceType.SUBSONIC -> "Subsonic"
         ImportSourceType.EMBY -> "Emby"
+        ImportSourceType.LX_MUSIC -> "LX Music"
     }
 }
 
@@ -2794,7 +2880,8 @@ private fun sourceTypeIcon(type: ImportSourceType): ImageVector {
         ImportSourceType.WEBDAV,
         ImportSourceType.NAVIDROME,
         ImportSourceType.SUBSONIC,
-        ImportSourceType.EMBY -> Icons.Rounded.Cloud
+        ImportSourceType.EMBY,
+        ImportSourceType.LX_MUSIC -> Icons.Rounded.Cloud
     }
 }
 
@@ -2806,6 +2893,7 @@ private fun sourceDisplayReference(source: ImportSource): String {
         ImportSourceType.NAVIDROME -> source.rootReference
         ImportSourceType.SUBSONIC -> source.rootReference
         ImportSourceType.EMBY -> source.rootReference
+        ImportSourceType.LX_MUSIC -> source.rootReference
     }
 }
 
