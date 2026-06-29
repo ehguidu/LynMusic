@@ -1338,6 +1338,7 @@ internal fun SourceCard(
 
                             top.iwesley.lyn.music.core.model.ImportSourceType.WEBDAV ->
                                 displayWebDavRootUrl(state.source.rootReference)
+                            top.iwesley.lyn.music.core.model.ImportSourceType.LX_MUSIC -> state.source.rootReference
                             top.iwesley.lyn.music.core.model.ImportSourceType.NAVIDROME,
                             top.iwesley.lyn.music.core.model.ImportSourceType.SUBSONIC,
                             top.iwesley.lyn.music.core.model.ImportSourceType.EMBY,
