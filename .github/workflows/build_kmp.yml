@@ -174,6 +174,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'zulu'
+
       - name: Download all workflow artifacts
         uses: actions/download-artifact@v4
         with:
@@ -182,6 +187,58 @@ jobs:
       - name: Show downloaded files
         shell: bash
         run: find release-assets -type f | sort
+
+      - name: Sign APK artifacts for install
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_HOME or ANDROID_SDK_ROOT is required to sign APKs"
+            exit 1
+          fi
+
+          BUILD_TOOLS_DIR="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          ZIPALIGN="$BUILD_TOOLS_DIR/zipalign"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+          KEYSTORE="$RUNNER_TEMP/lynmusic-ci-install.jks"
+          KEY_ALIAS="lynmusic-ci-install"
+          KEYSTORE_PASSWORD="lynmusic-ci-install"
+          KEY_PASSWORD="lynmusic-ci-install"
+
+          keytool -genkeypair \
+            -keystore "$KEYSTORE" \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=LynMusic CI Install,O=LynMusic,C=CN" \
+            -noprompt
+
+          mkdir -p release-assets-unsigned
+          while IFS= read -r -d '' apk; do
+            relative_path="${apk#release-assets/}"
+            unsigned_apk="release-assets-unsigned/$relative_path"
+            aligned_apk="${unsigned_apk%.apk}-aligned.apk"
+            signed_apk="release-assets/${relative_path%.apk}-signed.apk"
+
+            mkdir -p "$(dirname "$unsigned_apk")" "$(dirname "$signed_apk")"
+            mv "$apk" "$unsigned_apk"
+            "$ZIPALIGN" -p -f 4 "$unsigned_apk" "$aligned_apk"
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE" \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass "pass:$KEYSTORE_PASSWORD" \
+              --key-pass "pass:$KEY_PASSWORD" \
+              --out "$signed_apk" \
+              "$aligned_apk"
+            "$APKSIGNER" verify --verbose "$signed_apk"
+          done < <(find release-assets -type f -name "*.apk" -print0)
+
+          find release-assets -type f | sort
 
       - name: Decide release type
         id: meta
@@ -204,9 +261,9 @@ jobs:
           Automated release for tag ${GITHUB_REF_NAME}
 
           Included artifacts:
-          - Android Release APK (unsigned)
-          - Automotive Release APK (unsigned)
-          - TV Release APK (unsigned)
+          - Android Release APK (signed for install)
+          - Automotive Release APK (signed for install)
+          - TV Release APK (signed for install)
           - Desktop packages for matrix builds
 
           Please review the assets before publishing if this is a draft release.
